@@ -1,0 +1,5 @@
+*.pyc
+*.sqlite
+*.qdrep
+*.csv
+data_loading.egg-info/*
