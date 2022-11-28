@@ -13,7 +13,7 @@ from utils.training_logging import BenchLogger, TimingProfiler, GPUProfiler
 from utils.tensorflow_utils import prefetched_loader
 
 def parseargs():
-    parser = argparse.ArgumentParser(usage='Test GPU transfer speed in TensorFlow(default) and Pytorch.')
+    parser = argparse.ArgumentParser(usage="")
     parser.add_argument('--name')
     parser.add_argument('--num_workers', default=0, type=int)
     parser.add_argument('--batch_size', default=0, type=int)
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     channels = 3
     num_classes = args.num_classes
 
-    epochs = 5
+    epochs = 1
 
     if not args.autotune:
         print("Setting tf.data options")
@@ -105,7 +105,7 @@ if __name__ == '__main__':
             model.valid_accuracy.reset_states()
 
             if epoch == gpu_profiler_epoch and args.log_path:
-                gpu_profiler.start(epoch)
+                gpu_profiler.start()
 
             for i, ((images, labels), dt) in enumerate(timed_generator(train_loader)):
 
