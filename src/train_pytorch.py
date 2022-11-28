@@ -1,5 +1,3 @@
-import os
-import time
 import argparse
 from math import ceil
 
@@ -9,9 +7,9 @@ from torch import optim
 from utils.training_utils import nullcontext
 
 from utils.data_generation import ImageNetDataTorch, ImageNetDataDALI
-from utils.training_logging import BenchLogger, AverageMeter
+from utils.training_logging import BenchLogger, AverageMeter, TimingProfiler, GPUProfiler
 from utils.training_utils import timed_function, timed_generator, to_python_float
-from utils.pytorch_utils import ModelAndLoss, accuracy, get_train_step, get_val_step, get_prefetched_loader
+from utils.pytorch_utils import ModelAndLoss, get_train_step, get_val_step, get_prefetched_loader
 
 
 def parseargs():
@@ -21,12 +19,15 @@ def parseargs():
     parser.add_argument('--batch_size', default=0, type=int)
     parser.add_argument('--use_dali', action='store_true')
     parser.add_argument('--dali_cpu', action='store_true')
+    parser.add_argument('--output_type', type=str)
     parser.add_argument('--dlprof', action='store_true')
 
     parser.add_argument('--synthetic_data', action='store_true')
     parser.add_argument('--validation', action='store_true')
     parser.add_argument('--train_path', default="/home/neni/tiny-imagenet-200/train", type=str)
     parser.add_argument('--test_path', default="/home/neni/tiny-imagenet-200/val", type=str)
+    parser.add_argument('--log_path', type=str)
+    parser.add_argument('--gpu_profiler', action='store_true')
 
     parser.add_argument('--width', default=64, type=int)
     parser.add_argument('--height', default=64, type=int)
@@ -38,6 +39,10 @@ def parseargs():
 
 def get_loaders(batch_size, iterations, args):
     if args.use_dali:
+        if args.num_workers == 0:
+            args.num_workers = 1
+        if args.use_dali and args.synthetic_data and not args.output_type:
+            raise ValueError("Need to set output type when using DALI + synthetic data")
         imagenet_dali = ImageNetDataDALI(height, width, batch_size, iterations, "pytorch", args)
         train_loader = imagenet_dali.train_loader
         val_loader = imagenet_dali.val_loader
@@ -54,6 +59,7 @@ if __name__ == '__main__':
     height = args.height
     channels = 3
     num_classes = args.num_classes
+    examples = 100_000
 
     epochs = 1
 
@@ -62,23 +68,33 @@ if __name__ == '__main__':
     if args.num_workers <= 1:
         args.num_workers = 0
 
-    if args.synthetic_data:
-        experiment_name = f"{args.name}-synthetic_data"
-    else:
-        experiment_name = f"{args.name}-{max(args.num_workers,1)}-workers"
+    experiment_name = args.name
+
+    if args.num_workers:
+        experiment_name += f"-{args.num_workers}-workers"
+    elif args.synthetic_data:
+        experiment_name += "-synthetic_data"
 
     print("Experiment Name:", experiment_name)
+
+    if args.log_path:
+        timing_profiler = TimingProfiler(args.log_path, experiment_name)
 
     if args.dlprof:
         import nvidia_dlprof_pytorch_nvtx
         nvidia_dlprof_pytorch_nvtx.init()
 
-    for batch_size in [args.batch_size]:
-        iterations = ceil(100_000 / batch_size)
+    for batch_size in [128, 256, 512]:
+        iterations = ceil(examples / batch_size)
+        print(f"Total number of iterations: {iterations}, based on {examples} examples")
         logger_cls = BenchLogger("Train", batch_size, 0) # 0 is warmup iter
         train_top1 = AverageMeter()
         train_top5 = AverageMeter()
         train_loss = AverageMeter()
+
+        if args.log_path:
+            gpu_profiler_epoch = 2
+            gpu_profiler = GPUProfiler(args.log_path, experiment_name, batch_size, gpu_profiler_epoch)
 
         train_loader, val_loader = get_loaders(batch_size, iterations, args)
 
@@ -94,6 +110,10 @@ if __name__ == '__main__':
 
         with torch.autograd.profiler.emit_nvtx() if args.dlprof else nullcontext():
             for epoch in range(epochs):
+
+                if epoch == gpu_profiler_epoch and args.log_path:
+                    gpu_profiler.start(epoch)
+
                 for i, ((images, labels), dt) in enumerate(timed_generator(prefetched_loader(train_loader, args.device))):
                     (loss, prec1, prec5), bt = step(images, labels)
                     
@@ -109,7 +129,14 @@ if __name__ == '__main__':
 
                 total_img_s, compute_img_s, prep_img_s, batch_time, data_time = logger_cls.end_callback()
 
+                timing_profiler.write_row(epoch, batch_size, args.synthetic_data, \
+                        batch_time, compute_img_s, data_time, prep_img_s, \
+                        batch_time + data_time, total_img_s)
+
                 logger_cls.reset()
+
+                if epoch == gpu_profiler_epoch and args.log_path:
+                    gpu_profiler.stop()
 
                 print(
                     f"Epoch: [{epoch}/{epochs}]\t \

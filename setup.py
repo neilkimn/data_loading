@@ -26,7 +26,9 @@ setup(
         "tensorflow",
         "tqdm",
         "nvidia-dali-cuda110",
-        "nvidia-dali-tf-plugin-cuda110"
+        "nvidia-dali-tf-plugin-cuda110",
+        "nvidia-dlprofviewer",
+        "nvidia-dlprof[pytorch]" # Does this work?
     ],
     dependency_links=[
         "https://developer.download.nvidia.com/compute/redist"

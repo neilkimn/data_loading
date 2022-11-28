@@ -5,7 +5,7 @@ from torch import nn
 import torch.distributed as dist
 from torch.autograd import Variable
 
-from utils.models import ResNet_PT, SyntheticModelPT
+from utils.models import ResNet_PT
 
 def should_backup_checkpoint(args):
     def _sbc(epoch):
