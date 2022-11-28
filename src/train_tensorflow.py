@@ -9,7 +9,7 @@ import tqdm
 from utils.models import ResNet50_TF, SyntheticModelTF
 from utils.data_generation import ImageNetDataTF, ImageNetDataDALI
 from utils.training_utils import timed_function, timed_generator
-from utils.training_logging import BenchLogger, AverageMeter
+from utils.training_logging import BenchLogger, TimingProfiler, GPUProfiler
 from utils.tensorflow_utils import prefetched_loader
 
 def parseargs():
@@ -25,6 +25,8 @@ def parseargs():
     parser.add_argument('--validation', action='store_true')
     parser.add_argument('--train_path', default="/home/neni/tiny-imagenet-200/train", type=str)
     parser.add_argument('--test_path', default="/home/neni/tiny-imagenet-200/val", type=str)
+    parser.add_argument('--log_path', type=str)
+    parser.add_argument('--gpu_profiler', action='store_true')
 
     parser.add_argument('--width', default=64, type=int)
     parser.add_argument('--height', default=64, type=int)
@@ -33,13 +35,13 @@ def parseargs():
     args = parser.parse_args()
     return args
 
-def get_loaders(batch_size, iterations, args):
+def get_loaders(batch_size, iterations, args, options=None):
     if args.use_dali:
         imagenet_dali = ImageNetDataDALI(height, width, batch_size, iterations, "tensorflow", args)
         train_loader = imagenet_dali.train_loader
         val_loader = imagenet_dali.val_loader
     else:
-        imagenet_data = ImageNetDataTF(img_height=height, img_width=width, batch_size=batch_size, args=args)
+        imagenet_data = ImageNetDataTF(img_height=height, img_width=width, batch_size=batch_size, args=args, options=options)
         train_loader = imagenet_data.train_ds
         val_loader = imagenet_data.val_ds
 
@@ -54,28 +56,43 @@ if __name__ == '__main__':
 
     epochs = 5
 
+    if not args.autotune:
+        print("Setting tf.data options")
+        options = tf.data.Options()
+        options.experimental_optimization.apply_default_optimizations = False
+    else:
+        options = None
+
     device = "GPU:0"
 
+    experiment_name = args.name
+
     if args.autotune:
-        experiment_name = f"{args.name}-AUTOTUNE"
+        experiment_name += "-AUTOTUNE"
     elif args.num_workers:
-        experiment_name = f"{args.name}-{args.num_workers}-workers"
+        experiment_name += f"-{args.num_workers}-workers"
     elif args.synthetic_data:
-        experiment_name = f"{args.name}-synthetic_data"
+        experiment_name += "-synthetic_data"
 
     if args.use_dali and args.num_workers == 0:
         raise ValueError(f"Cannot use DALI with no workers and tf.AUTOTUNE: {args.autotune}")
 
     print("Experiment name: ", experiment_name)
 
-    for batch_size in [args.batch_size]:
+    if args.log_path:
+        timing_profiler = TimingProfiler(args.log_path, experiment_name)
+
+    for batch_size in [512]:
         iterations = ceil(100_000 / batch_size)
         logger_cls = BenchLogger("Train", batch_size, 0) # 0 is warmup iter
+        if args.log_path:
+            gpu_profiler_epoch = 2
+            gpu_profiler = GPUProfiler(args.log_path, experiment_name, batch_size, gpu_profiler_epoch)
 
         tf.keras.backend.clear_session()
         tf.keras.backend.set_image_data_format('channels_last')
 
-        train_loader, val_loader = get_loaders(batch_size, iterations, args)
+        train_loader, val_loader = get_loaders(batch_size, iterations, args, options)
 
         model = ResNet50_TF(num_classes, height, width)
 
@@ -87,6 +104,9 @@ if __name__ == '__main__':
             model.valid_loss.reset_states()
             model.valid_accuracy.reset_states()
 
+            if epoch == gpu_profiler_epoch and args.log_path:
+                gpu_profiler.start(epoch)
+
             for i, ((images, labels), dt) in enumerate(timed_generator(train_loader)):
 
                 _, bt = step(images, labels)
@@ -95,7 +115,14 @@ if __name__ == '__main__':
                     
             total_img_s, compute_img_s, prep_img_s, batch_time, data_time = logger_cls.end_callback()
 
+            timing_profiler.write_row(epoch, batch_size, args.synthetic_data, \
+                    batch_time, compute_img_s, data_time, prep_img_s, \
+                    batch_time + data_time, total_img_s)
+
             logger_cls.reset()
+
+            if epoch == gpu_profiler_epoch and args.log_path:
+                gpu_profiler.stop()
 
             print(
                 f"Epoch: [{epoch}/{epochs}]\t \

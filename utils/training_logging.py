@@ -1,3 +1,5 @@
+from pathlib import Path
+import os
 
 class BenchLogger(object):
     def __init__(self, name, total_bs, warmup_iter):
@@ -140,3 +142,32 @@ class AverageMeter(object):
         self.total += val
         self.count += n
         self.avg = self.sum / self.count
+
+class TimingProfiler():
+    def __init__(self, log_path, name):
+        self.profiler_log = log_path / Path('profiler-' + name + '.csv')
+        Path(log_path).mkdir(exist_ok = True)
+
+        with open(self.profiler_log, 'w') as f:
+            f.write("Epoch,Batch size,Synthetic data,Train time,Train (img/s),Data time,Data (img/s),Total time,Total (img/s)\n")
+
+    def write_row(self, epoch, batch_size, synthetic_data, train_time, train_img_s, data_time, data_img_s, total_time, total_img_s):
+        with open(self.profiler_log, 'a') as f:
+            f.write(f"{epoch},{batch_size},{synthetic_data},{round(train_time,2)},{round(train_img_s,2)},{round(data_time,2)},{round(data_img_s,2)},{round(total_time,2)},{round(total_img_s,2)}\n")
+
+class GPUProfiler():
+    def __init__(self, log_path, name, batch_size, epoch):
+        self.profiler_log = Path(log_path) / Path('gpu-profiler-' + name)
+        self.profiler_ext = ".csv"
+        self.batch_size = batch_size
+        self.epoch = epoch
+        Path(log_path).mkdir(exist_ok = True)
+
+    def start(self):
+        print("Started GPU stats!")
+        log_path = str(self.profiler_log) + f"bs_{self.batch_size}_epoch_{self.epoch}" + self.profiler_ext
+        os.system(f"nvidia-smi stats -i 0 -d gpuUtil,memUtil -f {log_path} &")
+
+    def stop(self):
+        print("Stopped GPU stats!")
+        os.system("pkill -f nvidia-smi")

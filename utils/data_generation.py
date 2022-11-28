@@ -79,10 +79,10 @@ class Infinite(Dataset):
 ### TENSORFLOW - DATA GENERATION ###
 
 class ImageNetDataTF:
-    def __init__(self, img_height, img_width, batch_size, args):
+    def __init__(self, img_height, img_width, batch_size, args, options=None):
         if args.synthetic_data:
-            train_ds = get_synth_input_fn(img_height, img_width, 3, args.num_classes, batch_size)
-            val_ds = get_synth_input_fn(img_height, img_width, 3, args.num_classes, batch_size)
+            self.train_ds = get_synth_input_fn(img_height, img_width, 3, args.num_classes, batch_size)
+            self.val_ds = get_synth_input_fn(img_height, img_width, 3, args.num_classes, batch_size)
         else:
             train_ds: tf.data.Dataset = tf.keras.utils.image_dataset_from_directory(
                 args.train_path,
@@ -98,21 +98,20 @@ class ImageNetDataTF:
             if args.autotune:
                 train_ds = train_ds.prefetch(tf.data.AUTOTUNE)
                 val_ds = val_ds.prefetch(tf.data.AUTOTUNE)
-            #elif args.num_workers:
-                #train_ds = train_ds.prefetch(args.num_workers)
-                #val_ds = val_ds.prefetch(args.num_workers)
 
-        self.train_preprocessor = PreprocessingTF(img_height, args.crop)
-        if args.autotune:
-            self.train_ds: tf.data.Dataset = train_ds.map(lambda x, y: (self.train_preprocessor(x), y), num_parallel_calls=tf.data.AUTOTUNE)
-        elif args.num_workers:
-            print(f"Setting {args.num_workers} parallel calls")
-            self.train_ds: tf.data.Dataset = train_ds.map(lambda x, y: (self.train_preprocessor(x), y), num_parallel_calls=args.num_workers)
-        else:
-            self.train_ds: tf.data.Dataset = train_ds.map(lambda x, y: (self.train_preprocessor(x), y))
+            self.train_preprocessor = PreprocessingTF(img_height, args.crop)
+            if args.autotune:
+                self.train_ds: tf.data.Dataset = train_ds.map(lambda x, y: (self.train_preprocessor(x), y), num_parallel_calls=tf.data.AUTOTUNE)
+            elif args.num_workers:
+                print(f"Setting {args.num_workers} parallel calls")
+                train_ds = train_ds.with_options(options)
+                self.train_ds: tf.data.Dataset = train_ds.map(lambda x, y: (self.train_preprocessor(x), y), num_parallel_calls=args.num_workers)
+            else:
+                train_ds = train_ds.with_options(options)
+                self.train_ds: tf.data.Dataset = train_ds.map(lambda x, y: (self.train_preprocessor(x), y))
 
-        self.val_preprocessor = PreprocessingTF(img_height, args.crop)
-        self.val_ds = val_ds.map(lambda x, y: (self.val_preprocessor(x, True), y))
+            self.val_preprocessor = PreprocessingTF(img_height, args.crop)
+            self.val_ds = val_ds.map(lambda x, y: (self.val_preprocessor(x, True), y))
 
 ### TENSORFLOW - PREPROCESS ###
 

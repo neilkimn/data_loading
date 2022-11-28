@@ -6,15 +6,13 @@ from math import ceil
 import torch
 from torch import nn
 from torch import optim
-from torch.autograd import Variable
+from utils.training_utils import nullcontext
 
 from utils.data_generation import ImageNetDataTorch, ImageNetDataDALI
 from utils.training_logging import BenchLogger, AverageMeter
 from utils.training_utils import timed_function, timed_generator, to_python_float
 from utils.pytorch_utils import ModelAndLoss, accuracy, get_train_step, get_val_step, get_prefetched_loader
 
-import nvidia_dlprof_pytorch_nvtx
-nvidia_dlprof_pytorch_nvtx.init()
 
 def parseargs():
     parser = argparse.ArgumentParser(usage="")
@@ -23,6 +21,7 @@ def parseargs():
     parser.add_argument('--batch_size', default=0, type=int)
     parser.add_argument('--use_dali', action='store_true')
     parser.add_argument('--dali_cpu', action='store_true')
+    parser.add_argument('--dlprof', action='store_true')
 
     parser.add_argument('--synthetic_data', action='store_true')
     parser.add_argument('--validation', action='store_true')
@@ -70,6 +69,10 @@ if __name__ == '__main__':
 
     print("Experiment Name:", experiment_name)
 
+    if args.dlprof:
+        import nvidia_dlprof_pytorch_nvtx
+        nvidia_dlprof_pytorch_nvtx.init()
+
     for batch_size in [args.batch_size]:
         iterations = ceil(100_000 / batch_size)
         logger_cls = BenchLogger("Train", batch_size, 0) # 0 is warmup iter
@@ -89,7 +92,7 @@ if __name__ == '__main__':
         step = timed_function(step)
         prefetched_loader = get_prefetched_loader("dali" if args.use_dali else "pytorch")
 
-        with torch.autograd.profiler.emit_nvtx():
+        with torch.autograd.profiler.emit_nvtx() if args.dlprof else nullcontext():
             for epoch in range(epochs):
                 for i, ((images, labels), dt) in enumerate(timed_generator(prefetched_loader(train_loader, args.device))):
                     (loss, prec1, prec5), bt = step(images, labels)

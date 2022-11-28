@@ -1,4 +1,5 @@
 import time
+from contextlib import contextmanager
 
 def timed_generator(gen):
     start = time.time()
@@ -20,3 +21,7 @@ def timed_function(f):
         ret = f(*args, **kwargs)
         return ret, time.time() - start
     return _timed_function
+
+@contextmanager
+def nullcontext(enter_result=None):
+    yield enter_result
