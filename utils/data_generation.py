@@ -6,7 +6,7 @@ import tensorflow as tf
 from contextlib import redirect_stdout
 
 from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
-from nvidia.dali.plugin.tf import DALIDataset
+from nvidia.dali.plugin.tf import DALIDataset, DALIIterator
 from nvidia.dali import Pipeline, pipeline_def, fn, types
 
 
@@ -244,53 +244,62 @@ class ImageNetDataDALI:
         if self.output_type == "tensorflow":
             self.train_loader = DALIDataset(
                 pipe_train,
-                output_dtypes = (tf.float32, tf.int32)
+                output_dtypes = (tf.float32, tf.int32),
+                batch_size=self.batch_size,
+                num_threads=args.num_workers
             )
             self.val_loader = DALIDataset(
                 pipe_val,
-                output_dtypes = (tf.float32, tf.int32)
+                output_dtypes = (tf.float32, tf.int32),
+                batch_size = self.batch_size,
+                num_threads=args.num_workers
             )
+            if args.autotune:
+                self.train_loader = self.train_loader.prefetch(tf.data.AUTOTUNE)
+                self.val_loader = self.val_loader.prefetch(tf.data.AUTOTUNE)
 
+def create_pipeline(batch_size, num_threads, data_dir, crop, output_type, dali_cpu):
 
-@pipeline_def(device_id=0)
-def create_pipeline(data_dir, crop, output_type, dali_cpu=False):
-    inputs, labels = fn.readers.file(
-        file_root=data_dir,
-        random_shuffle=True,
-        pad_last_batch=True,
-        name="Reader",
-    )
+    @pipeline_def(device_id=0, batch_size=batch_size, num_threads=num_threads)
+    def _create_pipeline(data_dir, crop, output_type, dali_cpu=False):
+        inputs, labels = fn.readers.file(
+            file_root=data_dir,
+            random_shuffle=True,
+            pad_last_batch=True,
+            name="Reader",
+        )
 
-    dali_device = "cpu" if dali_cpu else "gpu"
-    decoder_device = "cpu" if dali_cpu else "mixed"
-    output_layout = "HWC" if output_type == "tensorflow" else "CHW"
-    print("decoder device:", decoder_device)
-    print("output layout:", output_layout)
-    
-    images = fn.decoders.image(inputs, device = decoder_device)
+        dali_device = "cpu" if dali_cpu else "gpu"
+        decoder_device = "cpu" if dali_cpu else "mixed"
+        output_layout = "HWC" if output_type == "tensorflow" else "CHW"
+        print("decoder device:", decoder_device)
+        print("output layout:", output_layout)
+        
+        images = fn.decoders.image(inputs, device = decoder_device)
 
-    images = fn.resize( # Resize square
-        images,
-        dtype=types.FLOAT,
-        size=[256, 256]
-    )
+        images = fn.resize( # Resize square
+            images,
+            dtype=types.FLOAT,
+            size=[256, 256]
+        )
 
-    images = fn.crop_mirror_normalize( # Resize + Crop and convert image type to proper dtype and layout
-        images,
-        dtype=types.FLOAT,
-        output_layout=output_layout,
-        crop=crop,
-        mean=[0.485 * 255, 0.456 * 255, 0.406 * 255],
-        std=[0.229 * 255, 0.224 * 255, 0.225 * 255],
-        device=dali_device
-    )
+        images = fn.crop_mirror_normalize( # Resize + Crop and convert image type to proper dtype and layout
+            images,
+            dtype=types.FLOAT,
+            output_layout=output_layout,
+            crop=crop,
+            mean=[0.485 * 255, 0.456 * 255, 0.406 * 255],
+            std=[0.229 * 255, 0.224 * 255, 0.225 * 255],
+            device=dali_device
+        )
 
-    flip_coin = fn.random.coin_flip(probability=0.5)
-    images = fn.flip(images, horizontal = flip_coin, device = dali_device) # Horizontal Flip
+        flip_coin = fn.random.coin_flip(probability=0.5)
+        images = fn.flip(images, horizontal = flip_coin, device = dali_device) # Horizontal Flip
 
-    labels = fn.squeeze(labels, axes=[0])
+        labels = fn.squeeze(labels, axes=[0])
 
-    return images, labels.gpu()
+        return images.gpu(), labels.gpu()
+    return _create_pipeline(data_dir, crop, output_type, dali_cpu)
 
 def create_synthetic_pipeline(img_height, img_width, batch_size, iterations, num_classes, num_workers, output_type):
     iterator = InfiniteDALI(img_height, img_width, batch_size, iterations, num_classes, output_type)

@@ -15,7 +15,7 @@ from utils.tensorflow_utils import prefetched_loader
 def parseargs():
     parser = argparse.ArgumentParser(usage="")
     parser.add_argument('--name')
-    parser.add_argument('--num_workers', default=0, type=int)
+    parser.add_argument('--num_workers', default=1, type=int)
     parser.add_argument('--batch_size', default=0, type=int)
     parser.add_argument('--autotune', action='store_true')
     parser.add_argument('--use_dali', action='store_true')
@@ -53,10 +53,24 @@ if __name__ == '__main__':
     height = args.height
     channels = 3
     num_classes = args.num_classes
+    examples = 100_000
 
-    epochs = 1
+    epochs = 5
 
-    if not args.autotune:
+    # Set TensorFlow to not map all GPU memory visible to current process
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        try:
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+                logical_gpus = tf.config.list_logical_devices('GPU')
+                print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
+
+    if not args.autotune and not args.use_dali:
         print("Setting tf.data options")
         options = tf.data.Options()
         options.experimental_optimization.apply_default_optimizations = False
@@ -69,24 +83,23 @@ if __name__ == '__main__':
 
     if args.autotune:
         experiment_name += "-AUTOTUNE"
-    elif args.num_workers:
+    elif args.num_workers > 1:
         experiment_name += f"-{args.num_workers}-workers"
-    elif args.synthetic_data:
+    
+    if args.synthetic_data:
         experiment_name += "-synthetic_data"
-
-    if args.use_dali and args.num_workers == 0:
-        raise ValueError(f"Cannot use DALI with no workers and tf.AUTOTUNE: {args.autotune}")
 
     print("Experiment name: ", experiment_name)
 
     if args.log_path:
         timing_profiler = TimingProfiler(args.log_path, experiment_name)
 
-    for batch_size in [512]:
-        iterations = ceil(100_000 / batch_size)
+    for batch_size in [128, 256, 512]:
+        iterations = ceil(examples / batch_size)
+        print(f"Total number of iterations: {iterations}, based on {examples} examples")
         logger_cls = BenchLogger("Train", batch_size, 0) # 0 is warmup iter
         if args.log_path:
-            gpu_profiler_epoch = 2
+            gpu_profiler_epoch = epochs-1
             gpu_profiler = GPUProfiler(args.log_path, experiment_name, batch_size, gpu_profiler_epoch)
 
         tf.keras.backend.clear_session()
@@ -112,6 +125,9 @@ if __name__ == '__main__':
                 _, bt = step(images, labels)
 
                 logger_cls.iter_callback({"batch_time": bt, "data_time": dt})
+
+                if i > iterations:
+                    break
                     
             total_img_s, compute_img_s, prep_img_s, batch_time, data_time = logger_cls.end_callback()
 

@@ -61,7 +61,7 @@ if __name__ == '__main__':
     num_classes = args.num_classes
     examples = 100_000
 
-    epochs = 1
+    epochs = 5
 
     args.device = torch.device(f"cuda:0")
 
@@ -112,7 +112,7 @@ if __name__ == '__main__':
             for epoch in range(epochs):
 
                 if epoch == gpu_profiler_epoch and args.log_path:
-                    gpu_profiler.start(epoch)
+                    gpu_profiler.start()
 
                 for i, ((images, labels), dt) in enumerate(timed_generator(prefetched_loader(train_loader, args.device))):
                     (loss, prec1, prec5), bt = step(images, labels)
