@@ -54,9 +54,9 @@ if __name__ == '__main__':
     height = args.height
     channels = 3
     num_classes = args.num_classes
-    examples = 1281167
+    examples = 100_000
 
-    epochs = 3
+    epochs = 5
 
 
     if args.limit_memory_growth:
@@ -87,7 +87,7 @@ if __name__ == '__main__':
     if args.log_path:
         timing_profiler = TimingProfiler(args.log_path, experiment_name)
 
-    for batch_size in [32, 64, 128, 256]:
+    for batch_size in [128, 256, 512]:
         iterations = ceil(examples / batch_size)
         print(f"Total number of iterations: {iterations}, based on {examples} examples")
         logger_cls = BenchLogger("Train", batch_size, 0) # 0 is warmup iter
