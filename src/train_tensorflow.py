@@ -10,7 +10,7 @@ from utils.models import ResNet50_TF, SyntheticModelTF
 from utils.data_generation import ImageNetDataTF, ImageNetDataDALI
 from utils.training_utils import timed_function, timed_generator
 from utils.training_logging import BenchLogger, TimingProfiler, GPUProfiler
-from utils.tensorflow_utils import prefetched_loader
+from utils.tensorflow_utils import prefetched_loader, limit_memory_growth
 
 def parseargs():
     parser = argparse.ArgumentParser(usage="")
@@ -20,6 +20,7 @@ def parseargs():
     parser.add_argument('--autotune', action='store_true')
     parser.add_argument('--use_dali', action='store_true')
     parser.add_argument('--dali_cpu', action='store_true')
+    parser.add_argument('--limit_memory_growth', action='store_true')
 
     parser.add_argument('--synthetic_data', action='store_true')
     parser.add_argument('--validation', action='store_true')
@@ -35,13 +36,13 @@ def parseargs():
     args = parser.parse_args()
     return args
 
-def get_loaders(batch_size, iterations, args, options=None):
+def get_loaders(batch_size, iterations, args):
     if args.use_dali:
         imagenet_dali = ImageNetDataDALI(height, width, batch_size, iterations, "tensorflow", args)
         train_loader = imagenet_dali.train_loader
         val_loader = imagenet_dali.val_loader
     else:
-        imagenet_data = ImageNetDataTF(img_height=height, img_width=width, batch_size=batch_size, args=args, options=options)
+        imagenet_data = ImageNetDataTF(img_height=height, img_width=width, batch_size=batch_size, args=args)
         train_loader = imagenet_data.train_ds
         val_loader = imagenet_data.val_ds
 
@@ -53,29 +54,21 @@ if __name__ == '__main__':
     height = args.height
     channels = 3
     num_classes = args.num_classes
-    examples = 100_000
+    examples = 1281167
 
-    epochs = 5
+    epochs = 3
 
-    # Set TensorFlow to not map all GPU memory visible to current process
-    gpus = tf.config.list_physical_devices('GPU')
-    if gpus:
-        try:
-            # Currently, memory growth needs to be the same across GPUs
-            for gpu in gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
-                logical_gpus = tf.config.list_logical_devices('GPU')
-                print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-        except RuntimeError as e:
-            # Memory growth must be set before GPUs have been initialized
-            print(e)
 
-    if not args.autotune and not args.use_dali:
-        print("Setting tf.data options")
-        options = tf.data.Options()
-        options.experimental_optimization.apply_default_optimizations = False
+    if args.limit_memory_growth:
+        limit_memory_growth()
+
+    args.options = tf.data.Options()
+    if args.autotune:
+        print("Apply default tf.data optimizations? True")
+        args.options.experimental_optimization.apply_default_optimizations = True
     else:
-        options = None
+        print("Apply default tf.data optimizations? False")
+        args.options.experimental_optimization.apply_default_optimizations = False
 
     device = "GPU:0"
 
@@ -94,7 +87,7 @@ if __name__ == '__main__':
     if args.log_path:
         timing_profiler = TimingProfiler(args.log_path, experiment_name)
 
-    for batch_size in [128, 256, 512]:
+    for batch_size in [32, 64, 128, 256]:
         iterations = ceil(examples / batch_size)
         print(f"Total number of iterations: {iterations}, based on {examples} examples")
         logger_cls = BenchLogger("Train", batch_size, 0) # 0 is warmup iter
@@ -105,7 +98,7 @@ if __name__ == '__main__':
         tf.keras.backend.clear_session()
         tf.keras.backend.set_image_data_format('channels_last')
 
-        train_loader, val_loader = get_loaders(batch_size, iterations, args, options)
+        train_loader, val_loader = get_loaders(batch_size, iterations, args)
 
         model = ResNet50_TF(num_classes, height, width)
 

@@ -79,7 +79,7 @@ class Infinite(Dataset):
 ### TENSORFLOW - DATA GENERATION ###
 
 class ImageNetDataTF:
-    def __init__(self, img_height, img_width, batch_size, args, options=None):
+    def __init__(self, img_height, img_width, batch_size, args):
         if args.synthetic_data:
             self.train_ds = get_synth_input_fn(img_height, img_width, 3, args.num_classes, batch_size)
             self.val_ds = get_synth_input_fn(img_height, img_width, 3, args.num_classes, batch_size)
@@ -89,6 +89,7 @@ class ImageNetDataTF:
                 seed=42,
                 image_size=(img_height, img_width),
                 batch_size=batch_size)
+            train_ds.with_options(args.options)
             
             val_ds: tf.data.Dataset = tf.keras.utils.image_dataset_from_directory(
                 args.test_path,
@@ -104,10 +105,8 @@ class ImageNetDataTF:
                 self.train_ds: tf.data.Dataset = train_ds.map(lambda x, y: (self.train_preprocessor(x), y), num_parallel_calls=tf.data.AUTOTUNE)
             elif args.num_workers:
                 print(f"Setting {args.num_workers} parallel calls")
-                train_ds = train_ds.with_options(options)
                 self.train_ds: tf.data.Dataset = train_ds.map(lambda x, y: (self.train_preprocessor(x), y), num_parallel_calls=args.num_workers)
             else:
-                train_ds = train_ds.with_options(options)
                 self.train_ds: tf.data.Dataset = train_ds.map(lambda x, y: (self.train_preprocessor(x), y))
 
             self.val_preprocessor = PreprocessingTF(img_height, args.crop)
@@ -248,6 +247,9 @@ class ImageNetDataDALI:
                 batch_size=self.batch_size,
                 num_threads=args.num_workers
             )
+
+            self.train_loader = self.train_loader.with_options(args.options)
+
             self.val_loader = DALIDataset(
                 pipe_val,
                 output_dtypes = (tf.float32, tf.int32),

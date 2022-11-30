@@ -65,6 +65,8 @@ if __name__ == '__main__':
 
     args.device = torch.device(f"cuda:0")
 
+    # TODO: Add prefetch=True for tf.data autotune-comparable workload
+
     if args.num_workers <= 1:
         args.num_workers = 0
 

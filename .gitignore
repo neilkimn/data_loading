@@ -4,3 +4,5 @@
 *.qdstrm
 *.csv
 data_loading.egg-info/*
+data_loading.egg-info
+scratch
