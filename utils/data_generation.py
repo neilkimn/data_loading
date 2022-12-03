@@ -89,7 +89,7 @@ class ImageNetDataTF:
                 seed=42,
                 image_size=(args.height, args.width),
                 batch_size=batch_size)
-            train_ds.with_options(args.options)
+            train_ds = train_ds.with_options(args.options)
             
             val_ds: tf.data.Dataset = tf.keras.utils.image_dataset_from_directory(
                 args.test_path,
