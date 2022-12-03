@@ -79,28 +79,28 @@ class Infinite(Dataset):
 ### TENSORFLOW - DATA GENERATION ###
 
 class ImageNetDataTF:
-    def __init__(self, img_height, img_width, batch_size, args):
+    def __init__(self, batch_size, args):
         if args.synthetic_data:
-            self.train_ds = get_synth_input_fn(img_height, img_width, 3, args.num_classes, batch_size)
-            self.val_ds = get_synth_input_fn(img_height, img_width, 3, args.num_classes, batch_size)
+            self.train_ds = get_synth_input_fn(args.height, args.width, 3, args.num_classes, batch_size)
+            self.val_ds = get_synth_input_fn(args.height, args.width, 3, args.num_classes, batch_size)
         else:
             train_ds: tf.data.Dataset = tf.keras.utils.image_dataset_from_directory(
                 args.train_path,
                 seed=42,
-                image_size=(img_height, img_width),
+                image_size=(args.height, args.width),
                 batch_size=batch_size)
             train_ds.with_options(args.options)
             
             val_ds: tf.data.Dataset = tf.keras.utils.image_dataset_from_directory(
                 args.test_path,
                 seed=42,
-                image_size=(img_height, img_width),
+                image_size=(args.height, args.width),
                 batch_size=batch_size)
             if args.autotune:
                 train_ds = train_ds.prefetch(tf.data.AUTOTUNE)
                 val_ds = val_ds.prefetch(tf.data.AUTOTUNE)
 
-            self.train_preprocessor = PreprocessingTF(img_height, args.crop)
+            self.train_preprocessor = PreprocessingTF(args.height, args.width, args.crop)
             if args.autotune:
                 self.train_ds: tf.data.Dataset = train_ds.map(lambda x, y: (self.train_preprocessor(x), y), num_parallel_calls=tf.data.AUTOTUNE)
             elif args.num_workers:
@@ -109,7 +109,7 @@ class ImageNetDataTF:
             else:
                 self.train_ds: tf.data.Dataset = train_ds.map(lambda x, y: (self.train_preprocessor(x), y))
 
-            self.val_preprocessor = PreprocessingTF(img_height, args.crop)
+            self.val_preprocessor = PreprocessingTF(args.height, args.width, args.crop)
             self.val_ds = val_ds.map(lambda x, y: (self.val_preprocessor(x, True), y))
 
 ### TENSORFLOW - PREPROCESS ###
@@ -127,13 +127,13 @@ class ToTensor(tf.keras.layers.Layer):
         return normalize_img(x)
     
 class PreprocessingTF(tf.keras.layers.Layer):
-    def __init__(self, image_size, image_crop):
+    def __init__(self, image_height, image_width, image_crop):
         super(PreprocessingTF, self).__init__()
         mean = [0.485 * 255, 0.456 * 255, 0.406 * 255]
         std = [0.229 * 255, 0.224 * 255, 0.225 * 255]
 
         self.preprocessing_layer = tf.keras.Sequential([
-            tf.keras.layers.Resizing(image_size, image_size),
+            tf.keras.layers.Resizing(image_height, image_width),
             tf.keras.layers.RandomCrop(image_crop, image_crop),
             tf.keras.layers.RandomFlip(mode="horizontal"),
             ToTensor(),
@@ -191,9 +191,9 @@ def get_synth_input_fn(height, width, num_channels, num_classes, batch_size, dro
 ### DALI - DATA GENERATION ###
 
 class ImageNetDataDALI:
-    def __init__(self, img_height, img_width, batch_size, iterations, output_type, args):
-        self.img_height = img_height
-        self.img_width = img_width
+    def __init__(self, batch_size, iterations, output_type, args):
+        self.img_height = args.height
+        self.img_width = args.width
         self.crop = args.crop
         self.batch_size = batch_size
         self.iterations = iterations
@@ -211,7 +211,9 @@ class ImageNetDataDALI:
                 batch_size=self.batch_size,
                 num_threads=args.num_workers,
                 data_dir=args.train_path,
-                crop=(self.img_height, self.img_width),
+                img_height=self.img_height,
+                img_width=self.img_width,
+                crop=(self.crop, self.crop),
                 output_type=self.output_type,
                 dali_cpu=args.dali_cpu
             )
@@ -219,7 +221,9 @@ class ImageNetDataDALI:
                 batch_size=self.batch_size,
                 num_threads=args.num_workers,
                 data_dir=args.test_path,
-                crop=(self.img_height, self.img_width),
+                img_height=self.img_height,
+                img_width=self.img_width,
+                crop=(self.crop, self.crop),
                 output_type=self.output_type,
                 dali_cpu=args.dali_cpu
             )
@@ -263,7 +267,7 @@ class ImageNetDataDALI:
                 self.train_loader = self.train_loader.prefetch(args.prefetch)
                 self.val_loader = self.val_loader.prefetch(args.prefetch)
 
-def create_pipeline(batch_size, num_threads, data_dir, crop, output_type, dali_cpu):
+def create_pipeline(batch_size, num_threads, data_dir, img_height, img_width, crop, output_type, dali_cpu):
 
     @pipeline_def(device_id=0, batch_size=batch_size, num_threads=num_threads)
     def _create_pipeline(data_dir, crop, output_type, dali_cpu=False):
@@ -285,7 +289,7 @@ def create_pipeline(batch_size, num_threads, data_dir, crop, output_type, dali_c
         images = fn.resize( # Resize square
             images,
             dtype=types.FLOAT,
-            size=[256, 256]
+            size=[img_height, img_width]
         )
 
         images = fn.crop_mirror_normalize( # Resize + Crop and convert image type to proper dtype and layout

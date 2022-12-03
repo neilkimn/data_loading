@@ -40,11 +40,11 @@ def parseargs():
 
 def get_loaders(batch_size, iterations, args):
     if args.use_dali:
-        imagenet_dali = ImageNetDataDALI(height, width, batch_size, iterations, "tensorflow", args)
+        imagenet_dali = ImageNetDataDALI(batch_size, iterations, "tensorflow", args)
         train_loader = imagenet_dali.train_loader
         val_loader = imagenet_dali.val_loader
     else:
-        imagenet_data = ImageNetDataTF(img_height=height, img_width=width, batch_size=batch_size, args=args)
+        imagenet_data = ImageNetDataTF(batch_size=batch_size, args=args)
         train_loader = imagenet_data.train_ds
         val_loader = imagenet_data.val_ds
 
@@ -52,8 +52,6 @@ def get_loaders(batch_size, iterations, args):
 
 if __name__ == '__main__':
     args = parseargs()
-    width = args.width
-    height = args.height
     channels = 3
     num_classes = args.num_classes
     #examples = 1_281_167
@@ -106,7 +104,7 @@ if __name__ == '__main__':
 
         train_loader, val_loader = get_loaders(batch_size, iterations, args)
 
-        model = ResNet50_TF(num_classes, height, width)
+        model = ResNet50_TF(num_classes, args.height, args.width)
 
         step = timed_function(model.train_step)
 

@@ -161,13 +161,17 @@ class GPUProfiler():
         self.profiler_ext = ".csv"
         self.batch_size = batch_size
         self.epoch = epoch
+        self.running = False
         Path(log_path).mkdir(exist_ok = True)
 
     def start(self):
         print("Started GPU stats!")
         log_path = str(self.profiler_log) + f"_bs_{self.batch_size}_epoch_{self.epoch}" + self.profiler_ext
+        self.running = True
         os.system(f"nvidia-smi stats -i 0 -d gpuUtil,memUtil -f {log_path} &")
 
     def stop(self):
         print("Stopped GPU stats!")
-        os.system("pkill -f nvidia-smi")
+        if self.running:
+            os.system("pkill -f nvidia-smi")
+            self.running = False
