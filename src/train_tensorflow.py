@@ -16,11 +16,13 @@ def parseargs():
     parser = argparse.ArgumentParser(usage="")
     parser.add_argument('--name')
     parser.add_argument('--num_workers', default=1, type=int)
-    parser.add_argument('--batch_size', default=0, type=int)
+    parser.add_argument('-bs','--batch_sizes', nargs='+', help='<Required> Set flag', required=True, type=int)
     parser.add_argument('--autotune', action='store_true')
     parser.add_argument('--use_dali', action='store_true')
     parser.add_argument('--dali_cpu', action='store_true')
     parser.add_argument('--limit_memory_growth', action='store_true')
+    parser.add_argument('-pf', '--prefetch', default=0, type=int)
+    parser.add_argument('-df', '--default_optimizations', action='store_true')
 
     parser.add_argument('--synthetic_data', action='store_true')
     parser.add_argument('--validation', action='store_true')
@@ -54,16 +56,18 @@ if __name__ == '__main__':
     height = args.height
     channels = 3
     num_classes = args.num_classes
-    examples = 1281167
+    #examples = 1_281_167
+    examples = 100_000
 
-    epochs = 3
+    #epochs = 3
+    epochs = 5
 
 
     if args.limit_memory_growth:
         limit_memory_growth()
 
     args.options = tf.data.Options()
-    if args.autotune:
+    if args.autotune or args.default_optimizations:
         print("Apply default tf.data optimizations? True")
         args.options.experimental_optimization.apply_default_optimizations = True
     else:
@@ -87,7 +91,9 @@ if __name__ == '__main__':
     if args.log_path:
         timing_profiler = TimingProfiler(args.log_path, experiment_name)
 
-    for batch_size in [32, 64, 128, 256]:
+    print("Evaluating batch sizes:", args.batch_sizes)
+
+    for batch_size in args.batch_sizes:
         iterations = ceil(examples / batch_size)
         print(f"Total number of iterations: {iterations}, based on {examples} examples")
         logger_cls = BenchLogger("Train", batch_size, 0) # 0 is warmup iter
@@ -112,12 +118,18 @@ if __name__ == '__main__':
 
             if epoch == gpu_profiler_epoch and args.log_path:
                 gpu_profiler.start()
+                gpu_profiler_started = time.time()
 
             for i, ((images, labels), dt) in enumerate(timed_generator(train_loader)):
 
                 _, bt = step(images, labels)
 
                 logger_cls.iter_callback({"batch_time": bt, "data_time": dt})
+
+                if epoch == gpu_profiler_epoch and args.log_path:
+                    if ((time.time() - gpu_profiler_started) > 300) and gpu_profiler.running:
+                        gpu_profiler.stop()
+                        print("Stopped GPU profiler after 5 min")
 
                 if i > iterations:
                     break
@@ -130,7 +142,7 @@ if __name__ == '__main__':
 
             logger_cls.reset()
 
-            if epoch == gpu_profiler_epoch and args.log_path:
+            if (epoch == gpu_profiler_epoch and args.log_path):
                 gpu_profiler.stop()
 
             print(

@@ -8,3 +8,4 @@ data_loading.egg-info/*
 data_loading.egg-info
 scratch
 settings.json
+traces/*

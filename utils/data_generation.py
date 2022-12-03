@@ -259,6 +259,9 @@ class ImageNetDataDALI:
             if args.autotune:
                 self.train_loader = self.train_loader.prefetch(tf.data.AUTOTUNE)
                 self.val_loader = self.val_loader.prefetch(tf.data.AUTOTUNE)
+            else:
+                self.train_loader = self.train_loader.prefetch(args.prefetch)
+                self.val_loader = self.val_loader.prefetch(args.prefetch)
 
 def create_pipeline(batch_size, num_threads, data_dir, crop, output_type, dali_cpu):
 
