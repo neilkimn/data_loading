@@ -16,6 +16,7 @@ def parseargs():
     parser = argparse.ArgumentParser(usage="")
     parser.add_argument('--name')
     parser.add_argument('--num_workers', default=0, type=int)
+    parser.add_argument('-bs','--batch_sizes', nargs='+', help='<Required> Set flag', required=True, type=int)
     parser.add_argument('--batch_size', default=0, type=int)
     parser.add_argument('--use_dali', action='store_true')
     parser.add_argument('--dali_cpu', action='store_true')
@@ -43,11 +44,11 @@ def get_loaders(batch_size, iterations, args):
             args.num_workers = 1
         if args.use_dali and args.synthetic_data and not args.output_type:
             raise ValueError("Need to set output type when using DALI + synthetic data")
-        imagenet_dali = ImageNetDataDALI(height, width, batch_size, iterations, "pytorch", args)
+        imagenet_dali = ImageNetDataDALI(batch_size, iterations, "pytorch", args)
         train_loader = imagenet_dali.train_loader
         val_loader = imagenet_dali.val_loader
     else:
-        imagenet_torch = ImageNetDataTorch(height, width, batch_size, iterations, args)
+        imagenet_torch = ImageNetDataTorch(batch_size, iterations, args)
         train_loader = imagenet_torch.train_ds
         val_loader = imagenet_torch.val_ds
 
@@ -55,8 +56,6 @@ def get_loaders(batch_size, iterations, args):
 
 if __name__ == '__main__':
     args = parseargs()
-    width = args.width
-    height = args.height
     channels = 3
     num_classes = args.num_classes
     examples = 100_000

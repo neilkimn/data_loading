@@ -13,9 +13,9 @@ from nvidia.dali import Pipeline, pipeline_def, fn, types
 ### PYTORCH - DATA GENERATION + PREPROCESS ###
 
 class ImageNetDataTorch():
-    def __init__(self, img_height, img_width, batch_size, iterations, args):
-        self.img_height = img_height
-        self.img_width = img_width
+    def __init__(self, batch_size, iterations, args):
+        self.img_height = args.height
+        self.img_width = args.width
         self.crop = args.crop
         self.batch_size = batch_size
         self.iterations = iterations
@@ -34,10 +34,9 @@ class ImageNetDataTorch():
         else:
             train_ds = ImageFolder(root=args.train_path)
             val_ds = ImageFolder(root=args.test_path)
-        
 
             train_ds.transform = transforms.Compose([
-                transforms.Resize(256), # Resize square
+                transforms.Resize(self.img_height), # Resize square
                 transforms.RandomResizedCrop(self.crop), # Resize + Crop
                 transforms.RandomHorizontalFlip(), # Horizontal Flip
                 transforms.ToTensor(), # Normalize 1/2
