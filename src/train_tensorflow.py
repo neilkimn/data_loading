@@ -8,7 +8,7 @@ import argparse
 import tqdm
 from utils.models import ResNet50_TF, SyntheticModelTF
 from utils.data_generation import ImageNetDataTF, ImageNetDataDALI
-from utils.training_utils import timed_function, timed_generator
+from utils.training_utils import timed_function, timed_generator, timed_function_cp, timed_generator_cp
 from utils.training_logging import BenchLogger, TimingProfiler, GPUProfiler
 from utils.tensorflow_utils import prefetched_loader, limit_memory_growth
 
@@ -109,6 +109,8 @@ if __name__ == '__main__':
         step = timed_function(model.train_step)
 
         for epoch in range(epochs):
+            start = time.time()
+
             model.train_loss.reset_states()
             model.train_accuracy.reset_states()
             model.valid_loss.reset_states()
@@ -118,11 +120,12 @@ if __name__ == '__main__':
                 gpu_profiler.start()
                 gpu_profiler_started = time.time()
 
-            for i, ((images, labels), dt) in enumerate(timed_generator(train_loader)):
+            #for i, ((images, labels), dt_gpu, dt_cpu) in enumerate(timed_generator_cp(train_loader)):
+            for i, ((images, labels), dt_gpu, dt_cpu) in enumerate(timed_generator_cp(train_loader)):
 
                 _, bt = step(images, labels)
 
-                logger_cls.iter_callback({"batch_time": bt, "data_time": dt})
+                logger_cls.iter_callback({"batch_time": bt, "data_time_cpu": dt_cpu, "data_time_gpu": dt_gpu})
 
                 if epoch == gpu_profiler_epoch and args.log_path:
                     if ((time.time() - gpu_profiler_started) > 300) and gpu_profiler.running:
@@ -131,12 +134,12 @@ if __name__ == '__main__':
 
                 if i > iterations:
                     break
-                    
-            total_img_s, compute_img_s, prep_img_s, batch_time, data_time = logger_cls.end_callback()
 
-            timing_profiler.write_row(epoch, batch_size, args.synthetic_data, \
-                    batch_time, compute_img_s, data_time, prep_img_s, \
-                    batch_time + data_time, total_img_s)
+            end = time.time()
+
+            batch_time, data_time_cpu, data_time_gpu = logger_cls.end_callback()
+
+            timing_profiler.write_row(epoch, batch_size, end-start, batch_time, data_time_cpu, data_time_gpu)
 
             logger_cls.reset()
 
@@ -146,7 +149,8 @@ if __name__ == '__main__':
             print(
                 f"Epoch: [{epoch}/{epochs}]\t \
                   loss: {model.train_loss.result()}\t \
-                  acc: {model.train_accuracy.result()}")
+                  acc: {model.train_accuracy.result()}\
+                  total time: {end - start}")
             
         if args.validation:
             for valid_images, valid_labels in val_loader:

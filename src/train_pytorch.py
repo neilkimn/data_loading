@@ -1,5 +1,6 @@
 import argparse
 from math import ceil
+import time
 
 import torch
 from torch import nn
@@ -8,7 +9,7 @@ from utils.training_utils import nullcontext
 
 from utils.data_generation import ImageNetDataTorch, ImageNetDataDALI
 from utils.training_logging import BenchLogger, AverageMeter, TimingProfiler, GPUProfiler
-from utils.training_utils import timed_function, timed_generator, to_python_float
+from utils.training_utils import timed_function, timed_generator, timed_function_cp, timed_generator_cp, to_python_float
 from utils.pytorch_utils import ModelAndLoss, get_train_step, get_val_step, get_prefetched_loader
 
 
@@ -60,6 +61,8 @@ if __name__ == '__main__':
     num_classes = args.num_classes
     examples = 100_000
 
+    gpu_profiler_epoch = 2
+
     epochs = 5
 
     args.device = torch.device(f"cuda:0")
@@ -93,8 +96,7 @@ if __name__ == '__main__':
         train_top5 = AverageMeter()
         train_loss = AverageMeter()
 
-        if args.log_path:
-            gpu_profiler_epoch = 2
+        if args.log_path and args.gpu_profiler:
             gpu_profiler = GPUProfiler(args.log_path, experiment_name, batch_size, gpu_profiler_epoch)
 
         train_loader, val_loader = get_loaders(batch_size, iterations, args)
@@ -106,17 +108,18 @@ if __name__ == '__main__':
         model_and_loss.model.train()
 
         step = get_train_step(model_and_loss, optimizer)
-        step = timed_function(step)
+        step = timed_function_cp(step)
         prefetched_loader = get_prefetched_loader("dali" if args.use_dali else "pytorch")
 
         with torch.autograd.profiler.emit_nvtx() if args.dlprof else nullcontext():
             for epoch in range(epochs):
+                start = time.time()
 
-                if epoch == gpu_profiler_epoch and args.log_path:
+                if epoch == gpu_profiler_epoch and args.log_path and args.gpu_profiler:
                     gpu_profiler.start()
 
-                for i, ((images, labels), dt) in enumerate(timed_generator(prefetched_loader(train_loader, args.device))):
-                    (loss, prec1, prec5), bt = step(images, labels)
+                for i, ((images, labels), dt_gpu, dt_cpu) in enumerate(timed_generator_cp(prefetched_loader(train_loader, args.device))):
+                    (loss, prec1, prec5), bt_gpu, bt_cpu = step(images, labels)
                     
                     prec1 = to_python_float(prec1)
                     prec5 = to_python_float(prec5)
@@ -126,24 +129,25 @@ if __name__ == '__main__':
                     train_top5.update(prec5, images.size(0))
                     train_loss.update(loss, images.size(0))
 
-                    logger_cls.iter_callback({"batch_time": bt, "data_time": dt})
+                    logger_cls.iter_callback({"batch_time_cpu": bt_cpu, "batch_time_gpu": bt_gpu, "data_time_cpu": dt_cpu, "data_time_gpu": dt_gpu})
 
-                total_img_s, compute_img_s, prep_img_s, batch_time, data_time = logger_cls.end_callback()
+                end = time.time()
 
-                timing_profiler.write_row(epoch, batch_size, args.synthetic_data, \
-                        batch_time, compute_img_s, data_time, prep_img_s, \
-                        batch_time + data_time, total_img_s)
+                batch_time_cpu, batch_time_gpu, data_time_cpu, data_time_gpu = logger_cls.end_callback()
+
+                timing_profiler.write_row(epoch, end-start, batch_size, batch_time_cpu, batch_time_gpu, data_time_cpu, data_time_gpu)
 
                 logger_cls.reset()
 
-                if epoch == gpu_profiler_epoch and args.log_path:
+                if epoch == gpu_profiler_epoch and args.log_path and args.gpu_profiler:
                     gpu_profiler.stop()
 
                 print(
-                    f"Epoch: [{epoch}/{epochs}]\t \
-                    loss: {train_loss.avg}\t \
-                    acc@1: {train_top1.avg}\t \
-                    acc@5: {train_top5.avg}")
+                    f"Epoch: [{epoch}/{epochs}] \
+                    loss: {train_loss.avg} \
+                    acc@1: {train_top1.avg} \
+                    acc@5: {train_top5.avg} \
+                    total time: {end - start}")
             
         if args.validation:
             step = get_val_step(model_and_loss)

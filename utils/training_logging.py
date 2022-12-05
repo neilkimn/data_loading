@@ -4,31 +4,36 @@ import os
 class BenchLogger(object):
     def __init__(self, name, total_bs, warmup_iter):
         self.name = name
-        self.data_time = AverageMeter()
+        self.data_time_cpu = AverageMeter()
+        self.data_time_gpu = AverageMeter()
         self.batch_time = AverageMeter()
         self.warmup_iter = warmup_iter
         self.total_bs = total_bs
         self.i = 0
 
     def reset(self):
-        self.data_time.reset()
+        self.data_time_cpu.reset()
+        self.data_time_gpu.reset()
         self.batch_time.reset()
         self.i = 0
 
     def iter_callback(self, d, iter_freq=100):
         bt = d['batch_time']
-        dt = d['data_time']
+        dt_cpu = d['data_time_cpu']
+        dt_gpu = d['data_time_gpu']
         if self.i >= self.warmup_iter:
-            self.data_time.update(dt)
+            self.data_time_cpu.update(dt_cpu)
+            self.data_time_gpu.update(dt_gpu)
             self.batch_time.update(bt)
         self.i += 1
 
-        if self.i % iter_freq == 0:
-            print("Iter {}: Time: {:.3f}\tData Time: {:.3f}\timg/s (compute): {:.1f}\timg/s (total): {:.1f}".format(
-              self.i,
-              self.batch_time.total, self.data_time.total,
-              self.total_bs / self.batch_time.avg,
-              self.total_bs / (self.batch_time.avg + self.data_time.avg)))    
+        #if self.i % iter_freq == 0:
+        #    print("Iter {}: Time: {:.3f}\tData Time: {:.3f}\timg/s (compute): {:.1f}\timg/s (total): {:.1f}".format(
+        #      self.i,
+        #      self.batch_time.total, self.data_time.total,
+        #      self.total_bs / self.batch_time.avg,
+        #      self.total_bs / (self.batch_time.avg + self.data_time.avg)))   
+
 
     def end_callback(self):
         print("{} summary\tEpoch Time: {:.3f}\tData Time: {:.3f}\timg/s (compute): {:.1f}\timg/s (total): {:.1f}".format(
@@ -40,6 +45,16 @@ class BenchLogger(object):
         compute_img_s = self.total_bs / self.batch_time.avg,
         prep_img_s = self.total_bs / self.data_time.avg,
         return total_img_s[0], compute_img_s[0], prep_img_s[0], self.batch_time.total, self.data_time.total
+
+    def end_callback(self):
+        print("{} summary\tData Time (C): {:.3f}\t Data Time (G): {:.3f}\t Compute Time: {:.3f}\t ".format(
+              self.name,
+              self.data_time_cpu.total, self.data_time_gpu.total,
+              self.batch_time.total))
+        #total_img_s = self.total_bs / (self.batch_time.avg + self.data_time.avg),
+        #compute_img_s = self.total_bs / self.batch_time.avg,
+        #prep_img_s = self.total_bs / self.data_time.avg,
+        return self.batch_time.total, self.data_time_cpu.total, self.data_time_gpu.total
 
 
 class EpochLogger(object):
@@ -149,11 +164,15 @@ class TimingProfiler():
         Path(log_path).mkdir(exist_ok = True)
 
         with open(self.profiler_log, 'w') as f:
-            f.write("Epoch,Batch size,Synthetic data,Train time,Train (img/s),Data time,Data (img/s),Total time,Total (img/s)\n")
+            #f.write("Epoch,Batch size,Synthetic data,Train time,Train (img/s),Data time,Data (img/s),Total time,Total (img/s)\n")
+            f.write("Epoch,Batch size,Total time,batch time,data time (CPU),data time (GPU)\n")
 
-    def write_row(self, epoch, batch_size, synthetic_data, train_time, train_img_s, data_time, data_img_s, total_time, total_img_s):
+    #def write_row(self, epoch, batch_size, synthetic_data, train_time, train_img_s, data_time, data_img_s, total_time, total_img_s):
+        #with open(self.profiler_log, 'a') as f:
+            #f.write(f"{epoch},{batch_size},{synthetic_data},{round(train_time,2)},{round(train_img_s,2)},{round(data_time,2)},{round(data_img_s,2)},{round(total_time,2)},{round(total_img_s,2)}\n")
+    def write_row(self, epoch, batch_size, total_time, batch_time, data_time_cpu, data_time_gpu):
         with open(self.profiler_log, 'a') as f:
-            f.write(f"{epoch},{batch_size},{synthetic_data},{round(train_time,2)},{round(train_img_s,2)},{round(data_time,2)},{round(data_img_s,2)},{round(total_time,2)},{round(total_img_s,2)}\n")
+            f.write(f"{epoch},{batch_size},{round(total_time,1)},{round(batch_time,1)},{round(data_time_cpu,1)},{round(data_time_gpu,1)}\n")
 
 class GPUProfiler():
     def __init__(self, log_path, name, batch_size, epoch):

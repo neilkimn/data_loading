@@ -24,11 +24,13 @@ setup(
         "tensorboard",
         "tensorboard-plugin-profile",
         "tensorflow",
+        "tensorflow-gpu",
         "tqdm",
         "nvidia-dali-cuda110",
         "nvidia-dali-tf-plugin-cuda110",
         "nvidia-dlprofviewer",
-        "nvidia-dlprof[pytorch]" # Does this work?
+        "nvidia-dlprof[pytorch]", # Does this work?
+        "cupy-cuda110"
     ],
     dependency_links=[
         "https://developer.download.nvidia.com/compute/redist"
