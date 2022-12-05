@@ -80,8 +80,8 @@ class Infinite(Dataset):
 class ImageNetDataTF:
     def __init__(self, batch_size, args):
         if args.synthetic_data:
-            self.train_ds = get_synth_input_fn(args.height, args.width, 3, args.num_classes, batch_size)
-            self.val_ds = get_synth_input_fn(args.height, args.width, 3, args.num_classes, batch_size)
+            self.train_ds = get_synth_input_fn(args.crop, args.crop, 3, args.num_classes, batch_size)
+            self.val_ds = get_synth_input_fn(args.crop, args.crop, 3, args.num_classes, batch_size)
         else:
             train_ds: tf.data.Dataset = tf.keras.utils.image_dataset_from_directory(
                 args.train_path,

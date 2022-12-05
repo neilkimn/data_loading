@@ -27,12 +27,11 @@ class BenchLogger(object):
             self.batch_time.update(bt)
         self.i += 1
 
-        #if self.i % iter_freq == 0:
-        #    print("Iter {}: Time: {:.3f}\tData Time: {:.3f}\timg/s (compute): {:.1f}\timg/s (total): {:.1f}".format(
-        #      self.i,
-        #      self.batch_time.total, self.data_time.total,
-        #      self.total_bs / self.batch_time.avg,
-        #      self.total_bs / (self.batch_time.avg + self.data_time.avg)))   
+        if self.i % iter_freq == 0:
+            print("Iter: {}\tData Time (C): {:.3f}\t Data Time (G): {:.3f}\t Compute Time: {:.3f}\t ".format(
+              self.i,
+              self.data_time_cpu.total, self.data_time_gpu.total,
+              self.batch_time.total))
 
 
     def end_callback(self):

@@ -104,9 +104,9 @@ if __name__ == '__main__':
 
         train_loader, val_loader = get_loaders(batch_size, iterations, args)
 
-        model = ResNet50_TF(num_classes, args.height, args.width)
+        model = ResNet50_TF(num_classes, args.crop, args.crop)
 
-        step = timed_function(model.train_step)
+        step = timed_function_cp(model.train_step)
 
         for epoch in range(epochs):
             start = time.time()
@@ -123,7 +123,7 @@ if __name__ == '__main__':
             #for i, ((images, labels), dt_gpu, dt_cpu) in enumerate(timed_generator_cp(train_loader)):
             for i, ((images, labels), dt_gpu, dt_cpu) in enumerate(timed_generator_cp(train_loader)):
 
-                _, bt = step(images, labels)
+                _, bt, _ = step(images, labels)
 
                 logger_cls.iter_callback({"batch_time": bt, "data_time_cpu": dt_cpu, "data_time_gpu": dt_gpu})
 

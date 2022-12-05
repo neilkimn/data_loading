@@ -10,3 +10,4 @@ scratch
 settings.json
 traces/*
 src/train_tensorflow_old.py
+dgx_logs/*
