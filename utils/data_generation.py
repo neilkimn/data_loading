@@ -24,11 +24,11 @@ class ImageNetDataTorch():
         self.std = torch.tensor([0.229 * 255, 0.224 * 255, 0.225 * 255]).view(3,1,1)
 
         if args.synthetic_data:
-            train_ds = Infinite(self.iterations, self.batch_size, self.img_height, self.img_width, args.num_classes, args.device)
+            train_ds = Infinite(self.iterations, self.batch_size, self.crop, self.crop, args.num_classes, args.device)
 
             print("Remember to double check validation data iterations!")
             val_iterations = 10_000 // batch_size
-            val_ds = Infinite(val_iterations, self.batch_size, self.img_height, self.img_width, args.num_classes, args.device)
+            val_ds = Infinite(val_iterations, self.batch_size, self.crop, self.crop, args.num_classes, args.device)
 
             self.num_workers = 0
         else:
@@ -86,6 +86,7 @@ class ImageNetDataTF:
             train_ds: tf.data.Dataset = tf.keras.utils.image_dataset_from_directory(
                 args.train_path,
                 seed=42,
+                shuffle=True,
                 image_size=(args.height, args.width),
                 batch_size=batch_size)
             train_ds = train_ds.with_options(args.options)
@@ -93,6 +94,7 @@ class ImageNetDataTF:
             val_ds: tf.data.Dataset = tf.keras.utils.image_dataset_from_directory(
                 args.test_path,
                 seed=42,
+                shuffle=False,
                 image_size=(args.height, args.width),
                 batch_size=batch_size)
             if args.autotune:
@@ -214,7 +216,8 @@ class ImageNetDataDALI:
                 img_width=self.img_width,
                 crop=(self.crop, self.crop),
                 output_type=self.output_type,
-                dali_cpu=args.dali_cpu
+                dali_cpu=args.dali_cpu,
+                shuffle=True
             )
             pipe_val = create_pipeline(
                 batch_size=self.batch_size,
@@ -224,7 +227,8 @@ class ImageNetDataDALI:
                 img_width=self.img_width,
                 crop=(self.crop, self.crop),
                 output_type=self.output_type,
-                dali_cpu=args.dali_cpu
+                dali_cpu=args.dali_cpu,
+                shuffle=True
             )
         pipe_train.build()
         pipe_val.build()
@@ -266,13 +270,15 @@ class ImageNetDataDALI:
                 self.train_loader = self.train_loader.prefetch(args.prefetch)
                 self.val_loader = self.val_loader.prefetch(args.prefetch)
 
-def create_pipeline(batch_size, num_threads, data_dir, img_height, img_width, crop, output_type, dali_cpu):
+def create_pipeline(batch_size, num_threads, data_dir, img_height, img_width, crop, output_type, dali_cpu, shuffle):
 
     @pipeline_def(device_id=0, batch_size=batch_size, num_threads=num_threads)
-    def _create_pipeline(data_dir, crop, output_type, dali_cpu=False):
+    def _create_pipeline(data_dir, crop, output_type, shuffle, dali_cpu=False):
         inputs, labels = fn.readers.file(
             file_root=data_dir,
-            random_shuffle=True,
+            random_shuffle=shuffle,
+            prefetch_queue_depth=1, # does not work for small number of workers
+            read_ahead=False, # does not work for small number of workers
             pad_last_batch=True,
             name="Reader",
         )
@@ -307,7 +313,7 @@ def create_pipeline(batch_size, num_threads, data_dir, img_height, img_width, cr
         labels = fn.squeeze(labels, axes=[0])
 
         return images.gpu(), labels.gpu()
-    return _create_pipeline(data_dir, crop, output_type, dali_cpu)
+    return _create_pipeline(data_dir, crop, output_type, shuffle, dali_cpu)
 
 def create_synthetic_pipeline(img_height, img_width, batch_size, iterations, num_classes, num_workers, output_type):
     iterator = InfiniteDALI(img_height, img_width, batch_size, iterations, num_classes, output_type)

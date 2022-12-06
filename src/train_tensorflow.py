@@ -8,7 +8,7 @@ import argparse
 import tqdm
 from utils.models import ResNet50_TF, SyntheticModelTF
 from utils.data_generation import ImageNetDataTF, ImageNetDataDALI
-from utils.training_utils import timed_function, timed_generator, timed_function_cp, timed_generator_cp
+from utils.training_utils import timed_function, timed_generator, timed_function_cp, timed_function_cp2, timed_generator_cp
 from utils.training_logging import BenchLogger, TimingProfiler, GPUProfiler
 from utils.tensorflow_utils import prefetched_loader, limit_memory_growth
 
@@ -57,8 +57,8 @@ if __name__ == '__main__':
     #examples = 1_281_167
     examples = 100_000
 
-    #epochs = 3
-    epochs = 5
+    epochs = 3
+    #epochs = 5
 
 
     if args.limit_memory_growth:
@@ -123,7 +123,7 @@ if __name__ == '__main__':
             #for i, ((images, labels), dt_gpu, dt_cpu) in enumerate(timed_generator_cp(train_loader)):
             for i, ((images, labels), dt_gpu, dt_cpu) in enumerate(timed_generator_cp(train_loader)):
 
-                _, bt, _ = step(images, labels)
+                _, bt,_ = step(images, labels)
 
                 logger_cls.iter_callback({"batch_time": bt, "data_time_cpu": dt_cpu, "data_time_gpu": dt_gpu})
 

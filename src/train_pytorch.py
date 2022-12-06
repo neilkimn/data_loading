@@ -60,10 +60,9 @@ if __name__ == '__main__':
     channels = 3
     num_classes = args.num_classes
     examples = 100_000
+    #train_loader_len = int(train_loader._size / args.batch_size)
 
-    gpu_profiler_epoch = 2
-
-    epochs = 5
+    epochs = 3
 
     args.device = torch.device(f"cuda:0")
 
@@ -88,7 +87,7 @@ if __name__ == '__main__':
         import nvidia_dlprof_pytorch_nvtx
         nvidia_dlprof_pytorch_nvtx.init()
 
-    for batch_size in [128, 256, 512]:
+    for batch_size in args.batch_sizes:
         iterations = ceil(examples / batch_size)
         print(f"Total number of iterations: {iterations}, based on {examples} examples")
         logger_cls = BenchLogger("Train", batch_size, 0) # 0 is warmup iter
@@ -96,7 +95,8 @@ if __name__ == '__main__':
         train_top5 = AverageMeter()
         train_loss = AverageMeter()
 
-        if args.log_path and args.gpu_profiler:
+        if args.log_path:
+            gpu_profiler_epoch = epochs-1
             gpu_profiler = GPUProfiler(args.log_path, experiment_name, batch_size, gpu_profiler_epoch)
 
         train_loader, val_loader = get_loaders(batch_size, iterations, args)
@@ -115,11 +115,12 @@ if __name__ == '__main__':
             for epoch in range(epochs):
                 start = time.time()
 
-                if epoch == gpu_profiler_epoch and args.log_path and args.gpu_profiler:
+                if epoch == gpu_profiler_epoch and args.log_path:
                     gpu_profiler.start()
+                    gpu_profiler_started = time.time()
 
                 for i, ((images, labels), dt_gpu, dt_cpu) in enumerate(timed_generator_cp(prefetched_loader(train_loader, args.device))):
-                    (loss, prec1, prec5), bt_gpu, bt_cpu = step(images, labels)
+                    (loss, prec1, prec5), bt, _ = step(images, labels)
                     
                     prec1 = to_python_float(prec1)
                     prec5 = to_python_float(prec5)
@@ -129,13 +130,21 @@ if __name__ == '__main__':
                     train_top5.update(prec5, images.size(0))
                     train_loss.update(loss, images.size(0))
 
-                    logger_cls.iter_callback({"batch_time_cpu": bt_cpu, "batch_time_gpu": bt_gpu, "data_time_cpu": dt_cpu, "data_time_gpu": dt_gpu})
+                    logger_cls.iter_callback({"batch_time": bt, "data_time_cpu": dt_cpu, "data_time_gpu": dt_gpu})
+
+                    if epoch == gpu_profiler_epoch and args.log_path:
+                        if ((time.time() - gpu_profiler_started) > 300) and gpu_profiler.running:
+                            gpu_profiler.stop()
+                            print("Stopped GPU profiler after 5 min")
+                    
+                    if i > iterations:
+                        break
 
                 end = time.time()
 
-                batch_time_cpu, batch_time_gpu, data_time_cpu, data_time_gpu = logger_cls.end_callback()
+                batch_time, data_time_cpu, data_time_gpu = logger_cls.end_callback()
 
-                timing_profiler.write_row(epoch, end-start, batch_size, batch_time_cpu, batch_time_gpu, data_time_cpu, data_time_gpu)
+                timing_profiler.write_row(epoch, batch_size, end-start, batch_time, data_time_cpu, data_time_gpu)
 
                 logger_cls.reset()
 
