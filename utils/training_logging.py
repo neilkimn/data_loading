@@ -186,7 +186,7 @@ class GPUProfiler():
         print("Started GPU stats!")
         log_path = str(self.profiler_log) + f"_bs_{self.batch_size}_epoch_{self.epoch}" + self.profiler_ext
         self.running = True
-        os.system(f"nvidia-smi stats -i 0 -d gpuUtil,memUtil -f {log_path} &")
+        os.system(f"nvidia-smi -i 0  --query-gpu=timestamp,name,utilization.gpu,utilization.memory,memory.used --format=csv -f {log_path} -l 1 &")
 
     def stop(self):
         print("Stopped GPU stats!")
