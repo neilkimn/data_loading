@@ -60,7 +60,7 @@ if __name__ == '__main__':
     args = parseargs()
     channels = 3
     num_classes = args.num_classes
-    examples = 100_000
+    examples = 200_000
     #train_loader_len = int(train_loader._size / args.batch_size)
 
     epochs = 3
@@ -116,7 +116,7 @@ if __name__ == '__main__':
             for epoch in range(epochs):
                 start = time.time()
 
-                if epoch == gpu_profiler_epoch and args.log_path:
+                if epoch == gpu_profiler_epoch and args.log_path and args.gpu_profiler:
                     gpu_profiler.start()
                     gpu_profiler_started = time.time()
 
@@ -133,7 +133,7 @@ if __name__ == '__main__':
 
                     logger_cls.iter_callback({"batch_time": bt, "data_time_cpu": dt_cpu, "data_time_gpu": dt_gpu})
 
-                    if epoch == gpu_profiler_epoch and args.log_path:
+                    if epoch == gpu_profiler_epoch and args.log_path and args.gpu_profiler:
                         if ((time.time() - gpu_profiler_started) > 300) and gpu_profiler.running:
                             gpu_profiler.stop()
                             print("Stopped GPU profiler after 5 min")
