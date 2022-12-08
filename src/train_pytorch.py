@@ -16,6 +16,7 @@ from utils.pytorch_utils import ModelAndLoss, get_train_step, get_val_step, get_
 def parseargs():
     parser = argparse.ArgumentParser(usage="")
     parser.add_argument('--name')
+    parser.add_argument('--model', default="resnet50", type=str)
     parser.add_argument('--num_workers', default=0, type=int)
     parser.add_argument('-bs','--batch_sizes', nargs='+', help='<Required> Set flag', required=True, type=int)
     parser.add_argument('--batch_size', default=0, type=int)
@@ -102,7 +103,7 @@ if __name__ == '__main__':
         train_loader, val_loader = get_loaders(batch_size, iterations, args)
 
         loss_fn = nn.CrossEntropyLoss
-        model_and_loss = ModelAndLoss("resnet50", loss_fn, args)
+        model_and_loss = ModelAndLoss(args.model, loss_fn, args)
         optimizer = optim.SGD(model_and_loss.model.parameters(), lr=0.001, momentum=0.9)
         
         model_and_loss.model.train()

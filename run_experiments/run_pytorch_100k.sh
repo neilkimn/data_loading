@@ -25,6 +25,8 @@ python ../src/train_pytorch.py --name pytorch_resnet50_GPU --log_path $LOG_PATH 
 ## resnet50, no optimizations. 8 workers
 python ../src/train_pytorch.py --name pytorch_resnet50_GPU --log_path $LOG_PATH --train_path $TRAIN_DIR --test_path $VAL_DIR --num_workers 8 --use_dali -bs 128 256 512
 
+LOG_PATH="../logs/pytorch_dali_cpu/tiny_imagenet64"
+
 ## DALI (CPU)
 ## resnet50, no optimizations
 python ../src/train_pytorch.py --name pytorch_resnet50_no_optim_CPU --log_path $LOG_PATH --train_path $TRAIN_DIR --test_path $VAL_DIR --use_dali --dali_cpu -bs 128 256 512

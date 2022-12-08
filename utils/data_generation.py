@@ -289,12 +289,23 @@ def create_pipeline(batch_size, num_threads, data_dir, img_height, img_width, cr
         print("decoder device:", decoder_device)
         print("output layout:", output_layout)
         
-        images = fn.decoders.image(inputs, device = decoder_device)
+        #images = fn.decoders.image(inputs, device = decoder_device)
+
+        images = fn.decoders.image_random_crop(
+            inputs,
+            device = decoder_device,
+            random_aspect_ratio=[0.8,1.25],
+            random_area=[0.1, 0.1],
+            num_attempts=100,
+            output_type=types.RGB
+        )
 
         images = fn.resize( # Resize square
             images,
             dtype=types.FLOAT,
-            size=[img_height, img_width]
+            resize_x=crop[0],
+            resize_y=crop[1],
+            device=dali_device
         )
 
         images = fn.crop_mirror_normalize( # Resize + Crop and convert image type to proper dtype and layout

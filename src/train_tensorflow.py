@@ -55,7 +55,7 @@ if __name__ == '__main__':
     channels = 3
     num_classes = args.num_classes
     #examples = 1_281_167
-    examples = 100_000
+    examples = 200_000
 
     epochs = 3
     #epochs = 5
