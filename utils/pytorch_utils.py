@@ -49,6 +49,31 @@ def prefetched_loader(loader, device):
 
         yield input, target
 
+def prefetched_loader_nvidia(loader, device):
+    mean = torch.tensor([0.485 * 255, 0.456 * 255, 0.406 * 255]).cuda().view(1,3,1,1)
+    std = torch.tensor([0.229 * 255, 0.224 * 255, 0.225 * 255]).cuda().view(1,3,1,1)
+
+    stream = torch.cuda.Stream()
+    first = True
+
+    for next_input, next_target in loader:
+        with torch.cuda.stream(stream):
+            next_input = next_input.cuda()
+            next_target = next_target.cuda()
+            next_input = next_input.float()
+            next_input = next_input.sub_(mean).div_(std)
+
+        if not first:
+            yield input, target
+        else:
+            first = False
+
+        torch.cuda.current_stream().wait_stream(stream)
+        input = next_input
+        target = next_target
+
+    yield input, target
+
 def prefetched_loader_dali(loader, device):
 
     for x in loader:

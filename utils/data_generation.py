@@ -3,12 +3,28 @@ from torchvision.datasets import ImageFolder
 from torchvision import transforms
 from torch.utils.data import DataLoader as TorchDL, Dataset
 import tensorflow as tf
-from contextlib import redirect_stdout
+import numpy as np
 
 from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
 from nvidia.dali.plugin.tf import DALIDataset, DALIIterator
 from nvidia.dali import Pipeline, pipeline_def, fn, types
 
+def fast_collate(batch):
+    imgs = [img[0] for img in batch]
+    targets = torch.tensor([target[1] for target in batch], dtype=torch.int64)
+    w = imgs[0].size[0]
+    h = imgs[0].size[1]
+    tensor = torch.zeros( (len(imgs), 3, h, w), dtype=torch.uint8 )
+    for i, img in enumerate(imgs):
+        nump_array = np.asarray(img, dtype=np.uint8)
+        tens = torch.from_numpy(nump_array)
+        if(nump_array.ndim < 3):
+            nump_array = np.expand_dims(nump_array, axis=-1)
+        nump_array = np.rollaxis(nump_array, 2)
+
+        tensor[i] += torch.from_numpy(nump_array)
+
+    return tensor, targets
 
 ### PYTORCH - DATA GENERATION + PREPROCESS ###
 
@@ -43,7 +59,10 @@ class ImageNetDataTorch():
                 transforms.Normalize(self.mean, self.std) # Normalize 2/2
             ])
 
-            val_ds.transform = transforms.Compose([transforms.Resize(self.crop), transforms.ToTensor()])
+            val_ds.transform = transforms.Compose([
+                transforms.Resize(self.crop), 
+                transforms.ToTensor()
+                ])
 
         self.train_ds = TorchDL(train_ds, batch_size=self.batch_size,
                                     shuffle=True, num_workers=self.num_workers)
