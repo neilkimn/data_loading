@@ -18,15 +18,13 @@ $ pip install nvidia-dlprofviewer
 
 ### Run experiments
 
+Examples. Look in `src/train_pytorch.py` or `src/train_tensorflow.py` for arguments.
+
 ```shell
-python ../src/train_tensorflow.py --name tensorflow_resnet50_no_optim --log_path ../logs/tensorflow/imagenet64/ --train_path /home/neni/repos/thesis/tiny-imagenet-200/train --test_path /home/neni/repos/thesis/tiny-imagenet-200/val --gpu_profiler
 
-python ../src/train_tensorflow.py --name tensorflow_resnet50_synthetic_data --log_path ../logs/tensorflow/imagenet64/ --train_path /home/neni/repos/thesis/tiny-imagenet-200/train --test_path /home/neni/repos/thesis/tiny-imagenet-200/val --gpu_profiler --synthetic_data
+$ CUDA_VISIBLE_DEVICES=0 ./run_pytorch_imagenet.sh
 
-python ../src/train_tensorflow.py --name tensorflow_resnet50_AUTOTUNE --log_path ../logs/tensorflow/imagenet64/ --train_path /home/neni/repos/thesis/tiny-imagenet-200/train --test_path /home/neni/repos/thesis/tiny-imagenet-200/val --gpu_profiler --autotune
-$ CUDA_VISIBLE_DEVICES=0 ./run_tensorflow.sh
-
-$ CUDA_VISIBLE_DEVICES=0 ./run_pytorch.sh
+$ CUDA_VISIBLE_DEVICES=0 ./run_tensorflow_imagenet.sh
 ```
 
 ### DLProf profiling
